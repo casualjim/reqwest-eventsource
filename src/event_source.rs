@@ -17,7 +17,8 @@ use futures_core::task::{Context, Poll};
 use futures_timer::Delay;
 use pin_project_lite::pin_project;
 use reqwest::header::{HeaderName, HeaderValue};
-use reqwest::{Error as ReqwestError, IntoUrl, RequestBuilder, Response, StatusCode};
+use reqwest::{IntoUrl, Response, StatusCode};
+use reqwest_middleware::{Error as ReqwestError, RequestBuilder};
 use std::time::Duration;
 
 #[cfg(not(target_arch = "wasm32"))]
@@ -83,9 +84,19 @@ impl EventSource {
         })
     }
 
-    /// Create a simple EventSource based on a GET request
     pub fn get<T: IntoUrl>(url: T) -> Self {
-        Self::new(reqwest::Client::new().get(url)).unwrap()
+        Self::get_with_client(
+            url,
+            reqwest_middleware::ClientBuilder::new(reqwest::Client::new()).build(),
+        )
+    }
+
+    /// Create a simple EventSource based on a GET request
+    pub fn get_with_client<T: IntoUrl>(
+        url: T,
+        client: reqwest_middleware::ClientWithMiddleware,
+    ) -> Self {
+        Self::new(client.get(url)).unwrap()
     }
 
     /// Close the EventSource stream and stop trying to reconnect
@@ -168,8 +179,12 @@ impl<'a> EventSourceProjection<'a> {
     }
 
     fn handle_response(&mut self, res: Response) {
+        use futures_util::TryStreamExt;
         self.last_retry.take();
-        let mut stream = res.bytes_stream().eventsource();
+        let mut stream = res
+            .bytes_stream()
+            .map_err(ReqwestError::Reqwest)
+            .eventsource();
         stream.set_last_event_id(self.last_event_id.clone());
         self.cur_stream.replace(Box::pin(stream));
     }

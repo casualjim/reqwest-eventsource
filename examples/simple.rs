@@ -1,5 +1,5 @@
 use futures::stream::StreamExt;
-use reqwest_eventsource::{Event, EventSource};
+use reqwest_middleware_eventsource::{Event, EventSource};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
